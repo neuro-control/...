@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neuro Control - Jogos Acessíveis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <style>
+        :root {
+            --cor-primaria: #0d47a1; /* Azul escuro */
+            --cor-secundaria: #1976d2; /* Azul médio */
+            --cor-destaque: #ffc107; /* Amarelo âmbar */
+            --cor-texto: #ffffff;
+            --cor-sucesso: #4caf50;
+            --cor-erro: #f44336;
+            --cor-fundo-tela: rgba(13, 71, 161, 0.85);
+            --sombra-caixa: 0 10px 25px rgba(0, 0, 0, 0.3);
+            --sombra-texto: 2px 2px 8px rgba(0, 0, 0, 0.6);
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--cor-texto);
+            text-align: center;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas#background-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            display: block;
+        }
+        .screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+            transform: translateY(20px);
+            background: var(--cor-fundo-tela);
+            backdrop-filter: blur(5px);
+        }
+        .screen.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        h1, h2 {
+            font-size: 4.5rem;
+            text-shadow: var(--sombra-texto);
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: var(--cor-destaque);
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+        h2 { font-size: 3.5rem; color: var(--cor-texto); }
+        p { font-size: 1.4rem; text-shadow: var(--sombra-texto); font-weight: 300; max-width: 800px; }
+        .main-button, .game-option, .btn, .option-button {
+            background: var(--cor-secundaria);
+            color: var(--cor-texto);
+            border: 2px solid var(--cor-destaque);
+            border-radius: 50px;
+            padding: 15px 40px;
+            font-size: 1.6rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 15px;
+            min-width: 320px;
+            transition: all 0.3s ease;
+            box-shadow: var(--sombra-caixa);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .main-button:hover, .game-option:hover, .btn:hover, .option-button:hover {
+            transform: translateY(-8px) scale(1.03);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.4);
+            border-color: var(--cor-texto);
+            background: var(--cor-primaria);
+        }
+        .btn-exit { background-color: #d32f2f; }
+        .btn-report { background-color: #757575; }
+        .fixed-icons { position: fixed;
+            top: 20px; right: 20px; z-index: 1000; display: flex; gap: 15px;}
+        .icon-button { background: rgba(0,0,0,0.3);
+            border-radius: 50%; width: 50px; height: 50px; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 24px; color: white;
+            border: 2px solid white; transition: all 0.3s; }
+        .icon-button:hover { background: var(--cor-primaria);
+            transform: scale(1.15); }
+        #mic-icon.active, #cam-icon.active { background-color: var(--cor-sucesso); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(76, 175, 80, 0); } 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); } }
+        #quiz-question, #phrase-container { font-size: 2.5rem; margin: 25px; font-weight: 600; }
+        .quiz-options, #phrase-options { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        #phrase-options { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+        #drop-zone { display: inline-block; background-color: rgba(0,0,0,0.2); width: 200px; min-height:60px;
+            border: 3px dashed var(--cor-destaque); border-radius: 15px; vertical-align: middle; padding: 10px;
+        }
+        .draggable-option { padding: 12px 24px; background-color: var(--cor-destaque); color: var(--cor-primaria); border-radius: 30px;
+            cursor: grab; font-size: 1.8rem; font-weight: bold; }
+        #feedback-overlay { position: fixed; top: 0;
+            left: 0; width: 100%; height: 100%; z-index: 9999; opacity: 0; visibility: hidden; transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+            display: flex; justify-content: center; align-items: center; font-size: 8rem; font-weight: 700; text-shadow: var(--sombra-texto); transform: scale(0.7);
+        }
+        #feedback-overlay.active { opacity: 1; visibility: visible; transform: scale(1); }
+        #feedback-overlay.correct { background: radial-gradient(circle, rgba(76, 175, 80, 0.8), rgba(67, 160, 71, 0.95)); }
+        #feedback-overlay.incorrect { background: radial-gradient(circle, rgba(244, 67, 54, 0.8), rgba(211, 47, 47, 0.95)); }
+        .content-panel { background: rgba(0,0,0,0.6); padding: 40px; border-radius: 20px; max-height: 80vh; overflow-y: auto;
+            width: 90%; max-width: 1000px; }
+        .report-item { background: var(--cor-secundaria); margin-bottom: 20px; padding: 20px;
+            border-radius: 15px; text-align: left; border-left: 5px solid var(--cor-destaque); }
+        .report-section-title { font-size: 2.2rem;
+            margin-top: 25px; border-bottom: 3px solid var(--cor-destaque); padding-bottom: 15px; }
+        #settings-screen .content-panel { max-width: 600px; }
+        .settings-container { display: flex; flex-direction: column; gap: 25px; margin-top: 20px; text-align: left; }
+        .slider-container { display: flex; flex-direction: column; }
+        .slider-container label { font-size: 1.5rem; font-weight: 600; margin-bottom: 10px; }
+        .slider-container input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 10px;
+            background: var(--cor-primaria); border-radius: 5px; outline: none; transition: opacity .2s; cursor: pointer;
+        }
+        .slider-container input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 25px; height: 25px;
+            background: var(--cor-destaque); border-radius: 50%; border: 3px solid white; }
+        .slider-container input[type="range"]::-moz-range-thumb { width: 25px;
+            height: 25px; background: var(--cor-destaque); border-radius: 50%; border: 3px solid white;
+        }
+        .slider-container .slider-value { text-align: right; font-weight: bold; color: var(--cor-destaque); }
+        #piano-container { display: flex;
+            justify-content: center; align-items: flex-end; background: #212121; padding: 25px; border-radius: 15px; box-shadow: var(--sombra-caixa); margin-bottom: 25px; height: 300px;
+        }
+        .key { cursor: pointer; border: 1px solid #000;
+            box-shadow: inset 0 -4px 8px rgba(0,0,0,0.4); transition: all 0.1s ease;
+        }
+        .white-key { width: 70px; height: 100%; background-color: #ffffff; color: #000; display: flex;
+            justify-content: center; align-items: flex-end; font-size: 1.6rem; font-weight: 600; padding-bottom: 15px; border-radius: 0 0 8px 8px; margin: 0 2px;
+        }
+        .white-key:active { background-color: #e0e0e0; height: 98%; }
+        #eye-cursor {
+            position: fixed;
+            width: 35px; height: 35px;
+            border: 3px solid white; border-radius: 50%;
+            background-color: rgba(255, 193, 7, 0.5);
+            z-index: 10000; pointer-events: none;
+            display: none;
+            transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.7);
+        }
+        #eye-cursor.blinking { transform: scale(1.6); background-color: var(--cor-destaque); }
+        #eye-cursor.dragging { transform: scale(1.3); background-color: var(--cor-sucesso); box-shadow: 0 0 25px var(--cor-sucesso); }
+        video.input_video {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 200px;
+            height: 150px;
+            border-radius: 15px;
+            border: 3px solid var(--cor-destaque);
+            z-index: 999;
+            box-shadow: var(--sombra-caixa);
+            transform: scaleX(-1);
+            background-color: #000;
+        }
+        @media (max-width: 768px) {
+            h1 { font-size: 3rem; }
+            h2 { font-size: 2.2rem; }
+            p { font-size: 1.1rem; }
+            #quiz-question, #phrase-container { font-size: 1.8rem; }
+            .main-button, .game-option, .btn, .option-button {
+                padding: 18px 25px;
+                font-size: 1.2rem;
+                min-width: 280px;
+                width: 90%;
+            }
+            #piano-container {
+                flex-direction: column;
+                align-items: center;
+                height: auto;
+                width: 90%;
+                padding: 15px;
+            }
+            .white-key {
+                width: 80%;
+                height: 50px;
+                margin: 5px 0;
+                padding-bottom: 0;
+                justify-content: center;
+                align-items: center;
+                font-size: 1.4rem;
+                border-radius: 10px;
+            }
+             .white-key:active { height: 48px; }
+            #phrase-options { flex-direction: column; }
+            .draggable-option { font-size: 1.4rem; }
+            #feedback-overlay { font-size: 4rem; }
+            video.input_video { width: 120px; height: 90px; }
+        }
+        @media (orientation: landscape) and (max-height: 500px) {
+            h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+            h2 { font-size: 2rem; margin-bottom: 0.5rem; }
+            p { font-size: 1rem; margin: 0.5rem; }
+            #quiz-question, #phrase-container { font-size: 1.5rem; margin: 10px; }
+            .main-button, .game-option, .btn, .option-button {
+                font-size: 1rem;
+                padding: 10px 20px;
+                margin: 8px;
+                min-width: 250px;
+            }
+            #piano-container {
+                flex-direction: row;
+                height: 180px;
+                width: 95%;
+                padding: 15px;
+            }
+            .white-key {
+                width: 12%;
+                height: 100%;
+                margin: 0 1px;
+                font-size: 1.2rem;
+                padding-bottom: 10px;
+                border-radius: 0 0 6px 6px;
+            }
+             .white-key:active {
+                height: 98%;
+            }
+            #phrase-options {
+                flex-direction: row;
+            }
+            .draggable-option {
+                font-size: 1.2rem;
+                padding: 8px 16px;
+            }
+            .fixed-icons { top: 10px; right: 10px; }
+            .icon-button { width: 40px; height: 40px; font-size: 20px; }
+            video.input_video { width: 100px; height: 75px; bottom: 10px; left: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <video class="input_video" playsinline></video>
+    <div id="eye-cursor"></div>
+    <canvas id="background-canvas"></canvas>
+    <div id="feedback-overlay"></div>
+
+    <div class="fixed-icons">
+        <div id="settings-icon" class="icon-button" title="Ajustar Sensibilidade">⚙️</div>
+        <div id="mic-icon" class="icon-button" title="Ativar/Desativar Microfone">🎤</div>
+        <div id="cam-icon" class="icon-button" title="Ativar/Desativar Câmera (Pisque para clicar, sorria para arrastar, abra a boca para voltar)">📷</div>
+    </div>
+    
+    <div id="initial-screen" class="screen active">
+        <h1>Neuro Control</h1>
+        <p>Sua jornada de interação começa aqui. <br> Toque em "Começar" ou fale "Começar"</p>
+        <button id="start-btn" class="main-button">Começar</button>
+    </div>
+
+    <div id="selection-screen" class="screen">
+        <h2>Escolha um Jogo</h2>
+        <button class="game-option" data-game="quiz">1. Quiz de Perguntas</button>
+        <button class="game-option" data-game="music">2. Jogo de Piano</button>
+        <button class="game-option" data-game="phrase">3. Complete a Frase</button>
+        <button id="report-btn" class="btn btn-report">Ver Relatório</button>
+        <button class="btn btn-exit" onclick="navigateBack()">Voltar ao Início</button>
+    </div>
+    
+    <div id="report-screen" class="screen">
+        <div class="content-panel" id="report-content"></div>
+        <button id="clear-report-btn" class="btn">Limpar Relatório</button>
+        <button class="btn btn-exit" onclick="navigateBack()">Voltar</button>
+    </div>
+
+    <div id="settings-screen" class="screen">
+        <div class="content-panel">
+            <h2>Configurações</h2>
+            <div class="settings-container">
+                <div class="slider-container">
+                    <label for="blink-slider">Sensibilidade do PISCAR (Clique)</label>
+                    <input type="range" id="blink-slider" min="0.15" max="0.4" step="0.01">
+                    <span class="slider-value" id="blink-value"></span>
+                </div>
+                <div class="slider-container">
+                    <label for="smile-slider">Sensibilidade do SORRISO (Arrastar)</label>
+                    <input type="range" id="smile-slider" min="0.03" max="0.1" step="0.005">
+                    <span class="slider-value" id="smile-value"></span>
+                </div>
+                 <div class="slider-container">
+                    <label for="mouth-slider">Sensibilidade de ABRIR A BOCA (Voltar)</label>
+                    <input type="range" id="mouth-slider" min="0.05" max="0.2" step="0.01">
+                    <span class="slider-value" id="mouth-value"></span>
+                </div>
+            </div>
+             <button class="btn" id="close-settings-btn">Fechar</button>
+        </div>
+    </div>
+
+    <div id="quiz-screen" class="screen">
+        <h2 id="quiz-question"></h2>
+        <div id="quiz-options"></div>
+        <button class="btn btn-exit" onclick="navigateBack()">Sair do Jogo</button>
+    </div>
+
+    <div id="music-screen" class="screen">
+        <h2>Jogo de Piano</h2>
+        <p>Fale o nome da nota, clique na tecla, ou diga "tocar sequência".</p>
+        <div id="piano-container">
+            <div class="key white-key" data-note="do">Dó</div>
+            <div class="key white-key" data-note="re">Ré</div>
+            <div class="key white-key" data-note="mi">Mi</div>
+            <div class="key white-key" data-note="fa">Fá</div>
+            <div class="key white-key" data-note="sol">Sol</div>
+            <div class="key white-key" data-note="la">Lá</div>
+            <div class="key white-key" data-note="si">Si</div>
+        </div>
+        <p id="sequence-display">Sua sequência: </p>
+        <div>
+            <button id="play-sequence-btn" class="btn">Tocar Sequência</button>
+            <button id="clear-sequence-btn" class="btn">Limpar</button>
+            <button class="btn btn-exit" onclick="navigateBack()">Sair do Jogo</button>
+        </div>
+    </div>
+
+    <div id="phrase-screen" class="screen">
+        <h2 id="phrase-title">Complete a Frase</h2>
+        <div id="phrase-container"></div>
+        <p>Arraste a opção correta ou fale o nome dela.</p>
+        <div id="phrase-options"></div>
+        <button class="btn btn-exit" onclick="navigateBack()">Sair do Jogo</button>
+    </div>
+
+<script>
+// <-- MUDANÇA AQUI: Todo o código foi envolvido para aguardar o carregamento da página -->
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- VARIÁVEIS GLOBAIS E DE ESTADO ---
+    let currentScreen = 'initial-screen';
+    let mistakesReport = [];
+    let speechLog = [];
+    let audioContext;
+    let isMicPermanentlyEnabled = false;
+    let micTimeoutID = null;
+    let permissionsInitialized = false;
+
+    // --- FUNÇÕES DE INICIALIZAÇÃO E UTILITÁRIOS ---
+    function initPermissions() {
+        if (permissionsInitialized) return;
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            console.log("AudioContext inicializado com sucesso.");
+            permissionsInitialized = true;
+        } catch(e) {
+            console.error("AudioContext não é suportado ou falhou ao iniciar.", e);
+            alert("Seu navegador não suporta a tecnologia de áudio necessária.");
+        }
+    }
+    
+    function getAudioContext() {
+        if (!audioContext) {
+            initPermissions();
+        }
+        return audioContext;
+    }
+
+    function playSound(type) {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') { ctx.resume(); }
+
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        let freq = 0;
+
+        if (type === 'correct') { oscillator.type = 'sine'; freq = 600;
+        } else if (type === 'incorrect') { oscillator.type = 'square'; freq = 150;
+        } else {
+             const noteFrequencies = { 'do': 261.63, 're': 293.66, 'mi': 329.63, 'fa': 349.23, 'sol': 392.00, 'la': 440.00, 'si': 493.88 };
+             if(!noteFrequencies[type]) return;
+             oscillator.type = 'sine';
+             freq = noteFrequencies[type];
+        }
+        
+        oscillator.frequency.setValueAtTime(freq, ctx.currentTime);
+        gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.5);
+    }
+
+    const feedbackOverlay = document.getElementById('feedback-overlay');
+    function showFeedback(type, message) {
+        playSound(type);
+        feedbackOverlay.className = '';
+        feedbackOverlay.classList.add(type, 'active');
+        feedbackOverlay.textContent = message;
+        if (type === 'correct') { triggerCelebration(); }
+        setTimeout(() => { feedbackOverlay.classList.remove('active'); }, 1500);
+    }
+    
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+        currentScreen = screenId;
+    }
+    
+    function navigateBack() {
+        if (currentScreen === 'selection-screen' || currentScreen === 'report-screen' || currentScreen === 'settings-screen') {
+            showScreen('selection-screen');
+        } else if (currentScreen !== 'initial-screen') {
+            showScreen('selection-screen');
+        }
+    }
+
+    function shuffleArray(array) { 
+        for (let i = array.length - 1; i > 0; i--) { 
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]]; 
+        } 
+    }
+
+    // --- LÓGICA DE JOGOS E DADOS ---
+    const fullQuizData = [ { question: "Qual é a cor do céu em um dia limpo?", options: ["Verde", "Azul", "Laranja"], answer: "Azul" }, { question: "Quantas patas tem um cachorro?", options: ["Duas", "Quatro", "Seis"], answer: "Quatro" }, { question: "O que as abelhas produzem?", options: ["Leite", "Mel", "Queijo"], answer: "Mel" }];
+    let shuffledQuizQuestions = []; let currentQuestionIndex = 0;
+    
+    const fullPhraseData = [ { start: "A grama é", end: ".", options: ["azul", "verde", "roxa"], answer: "verde" }, { start: "O oposto de 'grande' é", end: ".", options: ["pequeno", "alto", "largo"], answer: "pequeno" }, { start: "A capital da França é", end: ".", options: ["Londres", "Roma", "Paris"], answer: "Paris" }];
+    let shuffledPhraseData = []; let currentPhraseIndex = 0;
+
+    function startGame(game) {
+        if (game === 'quiz') startQuiz();
+        else if (game === 'music') startMusicGame();
+        else if (game === 'phrase') startPhraseGame();
+        showScreen(`${game}-screen`);
+    }
+
+    function startQuiz() { 
+        shuffledQuizQuestions = [...fullQuizData]; 
+        shuffleArray(shuffledQuizQuestions); 
+        currentQuestionIndex = 0; 
+        displayQuestion(); 
+    }
+    
+    function displayQuestion() { 
+        const quizQuestionEl = document.getElementById('quiz-question');
+        const quizOptionsEl = document.getElementById('quiz-options');
+        if (currentQuestionIndex < shuffledQuizQuestions.length) { 
+            let q = shuffledQuizQuestions[currentQuestionIndex]; 
+            quizQuestionEl.textContent = q.question;
+            quizOptionsEl.innerHTML = ''; 
+            q.options.forEach(option => { 
+                const button = document.createElement('button'); 
+                button.textContent = option; 
+                button.classList.add('option-button'); 
+                button.addEventListener('click', () => checkQuizAnswer(option)); 
+                quizOptionsEl.appendChild(button); 
+            });
+        } else { 
+            showFeedback("correct", "Quiz completo!"); 
+            setTimeout(() => showScreen('selection-screen'), 2000); 
+        } 
+    }
+    
+    function checkQuizAnswer(selected) { 
+        const correct = shuffledQuizQuestions[currentQuestionIndex].answer; 
+        if (selected.toLowerCase() === correct.toLowerCase()) { 
+            showFeedback('correct', 'Certo!'); 
+            currentQuestionIndex++;
+            setTimeout(displayQuestion, 1700); 
+        } else { 
+            showFeedback('incorrect', 'Errado!'); 
+            addToReport('Quiz', shuffledQuizQuestions[currentQuestionIndex].question, selected); 
+        } 
+    }
+    
+    let noteSequence = [];
+    function startMusicGame() { 
+        noteSequence = []; 
+        updateSequenceDisplay(); 
+    } 
+    
+    function playNote(noteName) { 
+        playSound(noteName); 
+        noteSequence.push(noteName); 
+        updateSequenceDisplay(); 
+    } 
+    
+    function playCurrentSequence() { 
+        let delay = 0; 
+        noteSequence.forEach(note => { 
+            setTimeout(() => playSound(note), delay); delay += 400; 
+        }); 
+    } 
+    
+    function updateSequenceDisplay() { 
+        document.getElementById('sequence-display').textContent = "Sua sequência: " + noteSequence.join(' - ');
+    } 
+
+    function startPhraseGame() { 
+        shuffledPhraseData = [...fullPhraseData]; 
+        shuffleArray(shuffledPhraseData); 
+        currentPhraseIndex = 0; 
+        displayPhrase();
+    }
+    
+    function displayPhrase() {
+        const phraseContainer = document.getElementById('phrase-container');
+        const phraseOptionsContainer = document.getElementById('phrase-options');
+        if(currentPhraseIndex < shuffledPhraseData.length) { 
+            let p = shuffledPhraseData[currentPhraseIndex];
+            phraseContainer.innerHTML = `${p.start} <div id="drop-zone"></div> ${p.end}`; 
+            phraseOptionsContainer.innerHTML = ''; 
+            p.options.forEach(opt => { 
+                const div = document.createElement('div'); 
+                div.className = 'draggable-option'; 
+                div.draggable = true; 
+                div.textContent = opt; 
+                div.addEventListener('click', () => checkPhraseAnswer(opt)); 
+                phraseOptionsContainer.appendChild(div); 
+            });
+            setupDragAndDrop(); 
+        } else { 
+            showFeedback("correct", "Fim de jogo!"); 
+            setTimeout(() => showScreen('selection-screen'), 2000); 
+        } 
+    }
+    
+    function setupDragAndDrop() { 
+        const dropZone = document.getElementById('drop-zone');
+        document.querySelectorAll('.draggable-option').forEach(opt => { 
+            opt.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', opt.textContent)); 
+        }); 
+        dropZone.addEventListener('dragover', e => e.preventDefault()); 
+        dropZone.addEventListener('drop', e => { 
+            e.preventDefault(); 
+            checkPhraseAnswer(e.dataTransfer.getData('text')); 
+        });
+    }
+
+    function checkPhraseAnswer(answer) { 
+        const correct = shuffledPhraseData[currentPhraseIndex].answer; 
+        if(answer.toLowerCase() === correct.toLowerCase()) { 
+            showFeedback('correct', 'Muito bem!'); 
+            currentPhraseIndex++;
+            setTimeout(displayPhrase, 1700); 
+        } else { 
+            showFeedback('incorrect', 'Não foi dessa vez!'); 
+            const questionText = `${shuffledPhraseData[currentPhraseIndex].start} ___ ${shuffledPhraseData[currentPhraseIndex].end}`;
+            addToReport('Complete a Frase', questionText, answer); 
+        } 
+    }
+
+    // --- RELATÓRIO E HISTÓRICO ---
+    function addToReport(game, question, mistake) { 
+        mistakesReport.push({ game, question, mistake, timestamp: new Date() }); 
+    }
+
+    function showReport() {
+        const reportContent = document.getElementById('report-content');
+        reportContent.innerHTML = '<h2>Relatório</h2>';
+        reportContent.innerHTML += '<h3 class="report-section-title">Erros nos Jogos</h3>';
+        if (mistakesReport.length === 0) {
+            reportContent.innerHTML += '<p>Nenhum erro registrado ainda. Parabéns!</p>';
+        } else {
+            mistakesReport.forEach(item => {
+                const div = document.createElement('div');
+                div.classList.add('report-item');
+                div.innerHTML = `<strong>Jogo:</strong> ${item.game}<br><strong>Item:</strong> ${item.question}<br><strong>Sua resposta:</strong> <span style="color: var(--cor-erro);">${item.mistake}</span><br><small>${item.timestamp.toLocaleString('pt-BR')}</small>`;
+                reportContent.appendChild(div);
+            });
+        }
+        reportContent.innerHTML += '<h3 class="report-section-title">Histórico de Comandos de Voz</h3>';
+        if (speechLog.length === 0) {
+            reportContent.innerHTML += '<p>Nenhum comando de voz foi gravado.</p>';
+        } else {
+            speechLog.forEach(item => {
+                const div = document.createElement('div');
+                div.classList.add('report-item');
+                div.innerHTML = `<strong>Comando:</strong> "${item.command}"<br><small>${item.timestamp.toLocaleString('pt-BR')}</small>`;
+                reportContent.appendChild(div);
+            });
+        }
+        showScreen('report-screen');
+    }
+
+    // --- CONTROLE POR VOZ ---
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true; 
+        recognition.lang = 'pt-BR';
+        recognition.interimResults = false;
+
+        recognition.onstart = () => { 
+            document.getElementById('mic-icon').classList.add('active'); 
+            resetMicTimeout(); 
+        };
+        recognition.onend = () => { 
+            document.getElementById('mic-icon').classList.remove('active'); 
+            clearTimeout(micTimeoutID);
+            if(isMicPermanentlyEnabled) { 
+                setTimeout(() => { try { recognition.start(); } catch(e) { console.error("Falha ao reiniciar reconhecimento:", e); }}, 100); 
+            } 
+        };
+        recognition.onerror = e => { 
+            console.error("Erro no reconhecimento de voz:", e.error);
+            if(e.error === 'not-allowed' || e.error === 'no-speech' || e.error === 'aborted') { 
+                isMicPermanentlyEnabled = false; 
+                document.getElementById('mic-icon').classList.remove('active'); 
+                clearTimeout(micTimeoutID); 
+            } 
+        };
+        recognition.onresult = (event) => { 
+            resetMicTimeout(); 
+            const command = event.results[event.results.length - 1][0].transcript.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,""); 
+            console.log('Comando recebido:', command);
+            speechLog.push({ command: command, timestamp: new Date() }); 
+            handleVoiceCommand(command); 
+        };
+    }
+
+    function turnOffMic() { 
+        isMicPermanentlyEnabled = false; 
+        if(recognition) recognition.stop(); 
+        document.getElementById('mic-icon').classList.remove('active'); 
+        clearTimeout(micTimeoutID); 
+    }
+    
+    function resetMicTimeout() { 
+        clearTimeout(micTimeoutID);
+        micTimeoutID = setTimeout(turnOffMic, 5 * 60 * 1000); 
+    }
+
+    function handleVoiceCommand(command) {
+        if (command.includes('sair') || command.includes('voltar')) { navigateBack(); return; }
+        if(currentScreen === 'settings-screen' && command.includes('fechar')) { navigateBack(); return; }
+        switch (currentScreen) {
+            case 'initial-screen': if (command.includes('começar') || command.includes('jogar')) document.getElementById('start-btn').click(); break;
+            case 'selection-screen': if (command.includes('quiz') || command.includes('perguntas') || command.includes('número um')) startGame('quiz'); else if (command.includes('piano') || command.includes('música') || command.includes('número dois')) startGame('music'); else if (command.includes('frase') || command.includes('número três')) startGame('phrase'); else if (command.includes('relatório') || command.includes('erros')) document.getElementById('report-btn').click(); else if(command.includes('configurações') || command.includes('ajustes')) showScreen('settings-screen'); break;
+            case 'quiz-screen': if (currentQuestionIndex < shuffledQuizQuestions.length) { shuffledQuizQuestions[currentQuestionIndex].options.forEach(opt => { if(command.includes(opt.toLowerCase())) checkQuizAnswer(opt); }); } break;
+            case 'music-screen': const noteMap = {'dó': 'do', 'ré': 're', 'mi': 'mi', 'fá': 'fa', 'sol': 'sol', 'lá': 'la', 'si': 'si'}; for(const name in noteMap) { if (command.includes(name)) return playNote(noteMap[name]); } if(command.includes('tocar sequência')) playCurrentSequence(); if(command.includes('limpar')) document.getElementById('clear-sequence-btn').click(); break;
+            case 'phrase-screen': if (currentPhraseIndex < shuffledPhraseData.length) { shuffledPhraseData[currentPhraseIndex].options.forEach(opt => { if(command.includes(opt.toLowerCase())) checkPhraseAnswer(opt); }); } break;
+        }
+    }
+
+    // --- ANIMAÇÃO DE FUNDO ---
+    const bgCanvas = document.getElementById('background-canvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    let particles = [];
+    let celebrationParticles = [];
+    
+    function setCanvasSize() { bgCanvas.width = window.innerWidth; bgCanvas.height = window.innerHeight; }
+    
+    class Particle { 
+        constructor(x, y, size, speedX, speedY, color, life) { 
+            this.x = x ?? Math.random() * bgCanvas.width;
+            this.y = y ?? Math.random() * bgCanvas.height; 
+            this.size = size ?? Math.random() * 2 + 1; 
+            this.speedX = speedX ?? (Math.random() - 0.5) * 0.5; 
+            this.speedY = speedY ?? (Math.random() - 0.5) * 0.5; 
+            this.color = color ?? (Math.random() > 0.5 ? 'rgba(255, 255, 255, 0.8)' : 'rgba(173, 216, 230, 0.8)'); 
+            this.life = life ?? Infinity;
+        } 
+        update() { 
+            if (this.life !== Infinity) { 
+                this.y += this.speedY; 
+                this.speedY += 0.05; 
+                this.x += this.speedX; 
+                this.life--;
+            } else { 
+                if (this.x > bgCanvas.width + this.size || this.x < -this.size) this.speedX = -this.speedX;
+                if (this.y > bgCanvas.height + this.size || this.y < -this.size) this.speedY = -this.speedY; 
+                this.x += this.speedX; 
+                this.y += this.speedY;
+            } 
+        } 
+        draw() { 
+            bgCtx.fillStyle = this.color; 
+            bgCtx.beginPath(); 
+            bgCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2); 
+            bgCtx.fill(); 
+        } 
+    }
+    
+    function initBackground() { 
+        particles = []; 
+        const particleCount = (bgCanvas.width * bgCanvas.height) / 12000;
+        for (let i = 0; i < particleCount; i++) { particles.push(new Particle()); } 
+    }
+    
+    function triggerCelebration() { 
+        const centerX = bgCanvas.width / 2; 
+        const centerY = bgCanvas.height / 2;
+        for (let i = 0; i < 100; i++) { 
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 5 + 2; 
+            const speedX = Math.cos(angle) * speed; 
+            const speedY = Math.sin(angle) * speed;
+            const size = Math.random() * 3 + 2; 
+            celebrationParticles.push(new Particle(centerX, centerY, size, speedX, speedY, 'rgba(255, 215, 0, 0.9)', 100));
+        } 
+    }
+    
+    function animateBackground() { 
+        bgCtx.fillStyle = 'rgba(8, 28, 51, 0.2)'; 
+        bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+        particles.forEach(p => { p.update(); p.draw(); }); 
+        for(let i = celebrationParticles.length - 1; i >= 0; i--) { 
+            const p = celebrationParticles[i];
+            p.update(); p.draw(); 
+            if (p.life <= 0) { celebrationParticles.splice(i, 1); } 
+        } 
+        requestAnimationFrame(animateBackground); 
+    }
+    
+    // --- EVENT LISTENERS (CONFIGURADOS APÓS O DOM ESTAR PRONTO) ---
+    const startButton = document.getElementById('start-btn');
+    const startAction = () => {
+        initPermissions(); 
+        showScreen('selection-screen');
+    };
+    startButton.addEventListener('click', startAction);
+    startButton.addEventListener('touchstart', startAction, { passive: true });
+
+    document.querySelectorAll('.game-option').forEach(button => {
+        button.addEventListener('click', () => startGame(button.dataset.game));
+    });
+
+    document.getElementById('report-btn').addEventListener('click', showReport);
+    document.getElementById('clear-report-btn').addEventListener('click', () => { 
+        mistakesReport = []; 
+        speechLog = [];
+        showScreen('selection-screen'); 
+    });
+
+    document.getElementById('settings-icon').addEventListener('click', () => showScreen('settings-screen'));
+    document.getElementById('close-settings-btn').addEventListener('click', () => showScreen('selection-screen'));
+
+    document.querySelectorAll('#piano-container .key').forEach(key => key.addEventListener('click', () => playNote(key.dataset.note)));
+    document.getElementById('play-sequence-btn').addEventListener('click', playCurrentSequence);
+    document.getElementById('clear-sequence-btn').addEventListener('click', () => { 
+        noteSequence = []; 
+        updateSequenceDisplay(); 
+    });
+
+    if (SpeechRecognition) {
+        document.getElementById('mic-icon').addEventListener('click', () => { 
+            getAudioContext();
+            isMicPermanentlyEnabled = !isMicPermanentlyEnabled; 
+            if (isMicPermanentlyEnabled) { 
+                try { recognition.start(); } catch(e) { console.error("Não foi possível iniciar o reconhecimento.", e); isMicPermanentlyEnabled = false; } 
+            } else { recognition.stop(); } 
+        });
+    } else {
+        document.getElementById('mic-icon').style.display = 'none';
+    }
+
+    // --- INICIALIZAÇÃO DA ANIMAÇÃO ---
+    setCanvasSize();
+    initBackground();
+    animateBackground();
+    window.addEventListener('resize', () => { setCanvasSize(); initBackground(); });
+
+});
+// <-- MUDANÇA AQUI: Fim do bloco DOMContentLoaded -->
+</script>
+
+<script type="module">
+    // --- CONTROLE POR CÂMERA (CÓDIGO INDEPENDENTE E MODULAR) ---
+    // Esta parte do código é um módulo e já é carregada de forma 'deferida' por padrão,
+    // então não precisa estar dentro do DOMContentLoaded.
+
+    const videoElement = document.getElementsByClassName('input_video')[0];
+    const camIcon = document.getElementById('cam-icon');
+    const eyeCursor = document.getElementById('eye-cursor');
+    let faceMesh = null;
+    let isCameraActive = false;
+    let cameraStream = null;
+
+    let BLINK_SENSITIVITY = 0.25; 
+    let SMILE_SENSITIVITY = 0.05;
+    let MOUTH_OPEN_SENSITIVITY = 0.08;
+
+    const BLINK_DEBOUNCE_TIME = 250; 
+    const MOUTH_OPEN_DEBOUNCE_TIME = 500;
+
+    let isBlinking = false, blinkTimeout = null;
+    let isSmiling = false, wasSmiling = false;
+    let isDragging = false, draggedElement = null;
+    let neutralMouthWidth = 0;
+    let isMouthOpen = false, mouthOpenTimeout = null;
+
+    const blinkSlider = document.getElementById('blink-slider');
+    const smileSlider = document.getElementById('smile-slider');
+    const mouthSlider = document.getElementById('mouth-slider');
+    const blinkValue = document.getElementById('blink-value');
+    const smileValue = document.getElementById('smile-value');
+    const mouthValue = document.getElementById('mouth-value');
+
+    function updateSliderUI() {
+        blinkSlider.value = BLINK_SENSITIVITY;
+        blinkValue.textContent = `(${BLINK_SENSITIVITY.toFixed(2)})`;
+        smileSlider.value = SMILE_SENSITIVITY;
+        smileValue.textContent = `(${SMILE_SENSITIVITY.toFixed(3)})`;
+        mouthSlider.value = MOUTH_OPEN_SENSITIVITY;
+        mouthValue.textContent = `(${MOUTH_OPEN_SENSITIVITY.toFixed(2)})`;
+    }
+
+    blinkSlider.addEventListener('input', (e) => { BLINK_SENSITIVITY = parseFloat(e.target.value); updateSliderUI(); });
+    smileSlider.addEventListener('input', (e) => { SMILE_SENSITIVITY = parseFloat(e.target.value); updateSliderUI(); });
+    mouthSlider.addEventListener('input', (e) => { MOUTH_OPEN_SENSITIVITY = parseFloat(e.target.value); updateSliderUI(); });
+    
+    // É preciso esperar o DOM carregar para sliders também
+    document.addEventListener('DOMContentLoaded', updateSliderUI);
+
+    function getDistance(p1, p2) { return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow(p1.z - p2.z, 2)); }
+    
+    // A função navigateBack precisa ser acessível globalmente para o onclick no HTML
+    // A melhor prática seria adicionar o listener via JS, mas para manter a estrutura:
+    window.navigateBack = () => {
+        const currentScreenId = document.querySelector('.screen.active').id;
+        const selectionScreen = document.getElementById('selection-screen');
+        if (currentScreenId === 'selection-screen' || currentScreenId === 'report-screen' || currentScreenId === 'settings-screen') {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            selectionScreen.classList.add('active');
+        } else if (currentScreenId !== 'initial-screen') {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            selectionScreen.classList.add('active');
+        }
+    };
+
+    function onResults(results) {
+        if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) { return; }
+        const landmarks = results.multiFaceLandmarks[0];
+        const leftEye = landmarks[473];
+        const rightEye = landmarks[468]; 
+        if(leftEye && rightEye) {
+            const eyeCenterX = (leftEye.x + rightEye.x) / 2;
+            const eyeCenterY = (leftEye.y + rightEye.y) / 2;
+            let screenX, screenY;
+            const isPortrait = window.innerHeight > window.innerWidth;
+            if (isPortrait) {
+                screenX = eyeCenterY * window.innerWidth;
+                screenY = eyeCenterX * window.innerHeight; // Correção do cursor vertical
+            } else {
+                screenX = (1 - eyeCenterX) * window.innerWidth;
+                screenY = eyeCenterY * window.innerHeight;
+            }
+            eyeCursor.style.transform = `translate3d(${screenX}px, ${screenY}px, 0)`;
+        }
+
+        const p_l_top = landmarks[159]; const p_l_bottom = landmarks[145]; const p_l_left = landmarks[33]; const p_l_right = landmarks[133];
+        const p_r_top = landmarks[386]; const p_r_bottom = landmarks[374]; const p_r_left = landmarks[362]; const p_r_right = landmarks[263];
+        const ear_l = (getDistance(p_l_top, p_l_bottom)) / (getDistance(p_l_left, p_l_right));
+        const ear_r = (getDistance(p_r_top, p_r_bottom)) / (getDistance(p_r_left, p_r_right));
+        const avg_ear = (ear_l + ear_r) / 2;
+        if (avg_ear < BLINK_SENSITIVITY && !isBlinking) {
+            isBlinking = true;
+            eyeCursor.classList.add('blinking');
+            clearTimeout(blinkTimeout);
+            blinkTimeout = setTimeout(() => {
+                const x = parseFloat(eyeCursor.style.transform.split('(')[1]);
+                const y = parseFloat(eyeCursor.style.transform.split(',')[1]);
+                const elementUnderCursor = document.elementFromPoint(x, y);
+                if (elementUnderCursor && !isDragging) { elementUnderCursor.click(); }
+                isBlinking = false;
+            }, BLINK_DEBOUNCE_TIME);
+        } else if (avg_ear >= BLINK_SENSITIVITY) {
+             if(isBlinking) eyeCursor.classList.remove('blinking');
+             isBlinking = false;
+        }
+
+        const mouth_left = landmarks[61]; const mouth_right = landmarks[291];
+        const currentMouthWidth = getDistance(mouth_left, mouth_right);
+        if (neutralMouthWidth === 0) neutralMouthWidth = currentMouthWidth;
+        isSmiling = (currentMouthWidth > neutralMouthWidth * (1 + SMILE_SENSITIVITY));
+        if (isSmiling && !wasSmiling) {
+             const x = parseFloat(eyeCursor.style.transform.split('(')[1]); const y = parseFloat(eyeCursor.style.transform.split(',')[1]);
+             const element = document.elementFromPoint(x, y);
+             if (element && element.classList.contains('draggable-option')) {
+                 isDragging = true; draggedElement = element; eyeCursor.classList.add('dragging');
+             }
+        } else if (!isSmiling && wasSmiling) {
+             if (isDragging && draggedElement) {
+                const x = parseFloat(eyeCursor.style.transform.split('(')[1]); const y = parseFloat(eyeCursor.style.transform.split(',')[1]);
+                const dropZone = document.elementFromPoint(x, y);
+                 if (dropZone && dropZone.id === 'drop-zone') { 
+                    // Precisamos de uma forma de chamar a função do outro script
+                    // A melhor forma é emitir um evento customizado.
+                    const event = new CustomEvent('phraseCheck', { detail: draggedElement.textContent });
+                    document.dispatchEvent(event);
+                 }
+             }
+             isDragging = false; draggedElement = null; eyeCursor.classList.remove('dragging');
+        }
+        wasSmiling = isSmiling;
+        
+        const mouth_top = landmarks[13]; const mouth_bottom = landmarks[14];
+        const mouth_height = getDistance(mouth_top, mouth_bottom);
+        const mouth_aspect_ratio = mouth_height / currentMouthWidth;
+        if (mouth_aspect_ratio > MOUTH_OPEN_SENSITIVITY && !isMouthOpen) {
+            isMouthOpen = true;
+            clearTimeout(mouthOpenTimeout);
+            mouthOpenTimeout = setTimeout(() => {
+                console.log("Gesto 'Voltar' por boca aberta.");
+                window.navigateBack(); // Usa a função global
+                isMouthOpen = false;
+            }, MOUTH_OPEN_DEBOUNCE_TIME);
+        }
+    }
+
+    async function frameLoop() {
+        if (!isCameraActive) return;
+        await faceMesh.send({image: videoElement});
+        requestAnimationFrame(frameLoop);
+    }
+
+    async function startFaceTracking() {
+        faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        faceMesh.onResults(onResults);
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            videoElement.srcObject = cameraStream;
+            videoElement.addEventListener('loadedmetadata', () => {
+                videoElement.play();
+                isCameraActive = true;
+                frameLoop();
+                videoElement.style.display = 'block';
+                eyeCursor.style.display = 'block';
+                camIcon.classList.add('active');
+            });
+        } catch (err) {
+            console.error("Erro ao acessar a câmera frontal: ", err);
+            alert("Não foi possível acessar a câmera. Por favor, verifique as permissões do navegador.");
+        }
+    }
+
+    function stopFaceTracking() {
+        isCameraActive = false;
+        if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); }
+        if(faceMesh) { faceMesh.close(); faceMesh = null; }
+        videoElement.style.display = 'none';
+        eyeCursor.style.display = 'none';
+        camIcon.classList.remove('active');
+        isBlinking = false; isSmiling = wasSmiling = isDragging = false;
+        draggedElement = null; neutralMouthWidth = 0; isMouthOpen = false;
+    }
+
+    camIcon.addEventListener('click', () => {
+        if(isCameraActive) { stopFaceTracking(); } 
+        else { startFaceTracking(); }
+    });
+</script>
+</body>
+</html>
